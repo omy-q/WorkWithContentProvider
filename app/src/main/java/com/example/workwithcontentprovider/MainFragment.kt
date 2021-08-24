@@ -14,16 +14,13 @@ import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
 import android.provider.ContactsContract
-import android.util.Log
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.workwithcontentprovider.databinding.MainFragmentBinding
 
 class MainFragment : Fragment() {
 
-    private val READ_CONTACTS = 1
-    private val CALL = 2
-    private val SEND = 3
     private val numberIsNotSpecified = "default"
     private lateinit var number : String
     private lateinit var message: String
@@ -36,7 +33,7 @@ class MainFragment : Fragment() {
                 when (PERMISSION_GRANTED) {
                     ContextCompat.checkSelfPermission(it,
                         Manifest.permission.CALL_PHONE) -> phoneCall(number)
-                    else -> requestPermissions(arrayOf(Manifest.permission.CALL_PHONE), CALL)
+                    else -> permCallReqLauncher.launch(Manifest.permission.CALL_PHONE)
                 }
             }
         }
@@ -48,7 +45,7 @@ class MainFragment : Fragment() {
                 when (PERMISSION_GRANTED) {
                     ContextCompat.checkSelfPermission(it,
                         Manifest.permission.SEND_SMS) -> sendMessage(number, message)
-                    else -> requestPermissions(arrayOf(Manifest.permission.SEND_SMS), SEND)
+                    else -> permSendMessageReqLauncher.launch(Manifest.permission.SEND_SMS)
                 }
             }
         }
@@ -101,7 +98,8 @@ class MainFragment : Fragment() {
             when (PERMISSION_GRANTED) {
                 ContextCompat.checkSelfPermission(it,
                     Manifest.permission.READ_CONTACTS) -> getContacts()
-                else -> requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), READ_CONTACTS)
+                else ->
+                    permReadContactReqLauncher.launch(Manifest.permission.READ_CONTACTS)
             }
         }
     }
@@ -115,38 +113,30 @@ class MainFragment : Fragment() {
             .show()
     }
 
-    private fun requestPermission() {
-        requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), READ_CONTACTS)
+    private val permReadContactReqLauncher = registerForActivityResult(ActivityResultContracts
+        .RequestPermission()){ isGranted ->
+        if (isGranted) {
+            getContacts()
+        } else {
+            context?.let { showDialog(it, "Доступ к контактам") }
+        }
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        when (requestCode) {
-            READ_CONTACTS -> {
-                if (grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED) {
-                    getContacts()
-                } else {
-                    context?.let { showDialog(it, "Доступ к контактам") }
-                }
-            }
-            CALL -> {
-                if(grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED) {
-                    phoneCall(number)
-                } else{
-                    context?.let { showDialog(it, "Доступ к выполнению вызовов и их управлению") }
-                }
-            }
-            SEND -> {
-                if(grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED) {
-                    sendMessage(number, message)
-                } else{
-                    context?.let { showDialog(it, "Доступ к отправке и просмотру SMS-сообщений") }
-                }
-            }
+    private val permCallReqLauncher = registerForActivityResult(ActivityResultContracts
+        .RequestPermission()){ isGranted ->
+        if (isGranted) {
+            phoneCall(number)
+        } else {
+            context?.let { showDialog(it, "Доступ к выполнению вызовов и их управлению") }
+        }
+    }
+
+    private val permSendMessageReqLauncher = registerForActivityResult(ActivityResultContracts
+        .RequestPermission()){ isGranted ->
+        if (isGranted) {
+            sendMessage(number, message)
+        } else {
+            context?.let { showDialog(it, "Доступ к отправке и просмотру SMS-сообщений") }
         }
     }
 
