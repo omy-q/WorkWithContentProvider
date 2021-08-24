@@ -32,7 +32,8 @@ class RecyclerAdapter(private val onItemViewClickListener: OnItemViewClickListen
                         else "default")
                 }
                 findViewById<Button>(R.id.sendMessage).setOnClickListener {
-                    onItemViewClickListener.onSendMessageButtonClick(contact.phones[0], "hello")
+                    onItemViewClickListener.onSendMessageButtonClick(contact.phones[0],
+                        "Привет, ${contact.name}")
                 }
             }
         }

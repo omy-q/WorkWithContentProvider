@@ -14,6 +14,7 @@ import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
 import android.provider.ContactsContract
+import android.util.Log
 import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.workwithcontentprovider.databinding.MainFragmentBinding
@@ -23,7 +24,9 @@ class MainFragment : Fragment() {
     private val READ_CONTACTS = 1
     private val CALL = 2
     private val SEND = 3
+    private val numberIsNotSpecified = "default"
     private lateinit var number : String
+    private lateinit var message: String
 
     private val contacts: MutableList<Contact> = mutableListOf()
     private val recyclerAdapter = RecyclerAdapter(object : OnItemViewClickListener {
@@ -38,12 +41,13 @@ class MainFragment : Fragment() {
             }
         }
 
-        override fun onSendMessageButtonClick(phone: String, message: String) {
+        override fun onSendMessageButtonClick(phone: String, msg: String) {
             number = phone
+            message = msg
             context?.let {
                 when (PERMISSION_GRANTED) {
                     ContextCompat.checkSelfPermission(it,
-                        Manifest.permission.SEND_SMS) -> sendMessage(number)
+                        Manifest.permission.SEND_SMS) -> sendMessage(number, message)
                     else -> requestPermissions(arrayOf(Manifest.permission.SEND_SMS), SEND)
                 }
             }
@@ -51,23 +55,23 @@ class MainFragment : Fragment() {
     })
 
     private fun phoneCall(number: String) {
-        if (number != "default") {
+        if (number != numberIsNotSpecified) {
             val callIntent = Intent(Intent.ACTION_CALL)
             callIntent.data = Uri.parse("tel:$number")
             startActivity(callIntent)
         } else {
-            Toast.makeText(context, "Number is not defined", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Number is not specified", Toast.LENGTH_LONG).show()
         }
     }
 
-    private fun sendMessage(number: String){
-        if (number != "default") {
-            val uri = Uri.parse("tel:$number")
+    private fun sendMessage(number: String, message: String){
+        if (number != numberIsNotSpecified) {
+            val uri = Uri.parse("smsto:$number")
             val sendIntent = Intent(Intent.ACTION_SENDTO, uri)
-            sendIntent.putExtra(Intent.EXTRA_TEXT, "Hello")
+            sendIntent.putExtra("sms_body", message)
             startActivity(sendIntent)}
         else{
-            Toast.makeText(context, "Number is not defined", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Number is not specified", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -89,25 +93,24 @@ class MainFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        checkPermission()
+        getData()
     }
 
-    private fun checkPermission() {
+    private fun getData() {
         context?.let {
             when (PERMISSION_GRANTED) {
                 ContextCompat.checkSelfPermission(it,
                     Manifest.permission.READ_CONTACTS) -> getContacts()
-                else -> requestPermission()
+                else -> requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), READ_CONTACTS)
             }
         }
     }
 
-    private fun showDialog(it: Context) {
+    private fun showDialog(it: Context, title : String) {
         AlertDialog.Builder(it)
-            .setTitle("Доступ к контактам")
-            .setMessage("Объяснение")
-            .setNegativeButton("Не надо") { dialog, _ -> dialog.dismiss() }
-            .setPositiveButton("Предоставить доступ") { _, _ -> requestPermission() }
+            .setTitle(title)
+            .setMessage("Доступ пользователем дан не был")
+            .setNegativeButton("Закрыть") { dialog, _ -> dialog.dismiss() }
             .create()
             .show()
     }
@@ -127,21 +130,21 @@ class MainFragment : Fragment() {
                 if (grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED) {
                     getContacts()
                 } else {
-                    context?.let { showDialog(it) }
+                    context?.let { showDialog(it, "Доступ к контактам") }
                 }
             }
             CALL -> {
                 if(grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED) {
                     phoneCall(number)
                 } else{
-                    Toast.makeText(context, "You don't assign permission.", Toast.LENGTH_SHORT).show()
+                    context?.let { showDialog(it, "Доступ к выполнению вызовов и их управлению") }
                 }
             }
             SEND -> {
                 if(grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED) {
-                    sendMessage(number)
+                    sendMessage(number, message)
                 } else{
-                    Toast.makeText(context, "You don't assign permission.", Toast.LENGTH_SHORT).show()
+                    context?.let { showDialog(it, "Доступ к отправке и просмотру SMS-сообщений") }
                 }
             }
         }
@@ -162,21 +165,12 @@ class MainFragment : Fragment() {
                 for (i in 0..cursor.count) {
                     if (cursor.moveToPosition(i)) {
                         lateinit var phones: List<String>
-                        val id = cursor.getString(
-                            cursor
-                                .getColumnIndex(ContactsContract.Contacts._ID)
-                        )
-                        val name = cursor.getString(
-                            cursor
-                                .getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
-                        )
-                        if (Integer.parseInt(
-                                cursor.getString(
-                                    cursor
-                                        .getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER)
-                                )
-                            ) > 0
-                        ) {
+                        val id = cursor.getString(cursor
+                                .getColumnIndex(ContactsContract.Contacts._ID))
+                        val name = cursor.getString(cursor
+                                .getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME))
+                        if (Integer.parseInt(cursor.getString(cursor
+                                        .getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER))) > 0) {
                             phones = getContactPhones(it, id)
                         }
                         contacts.add(Contact(name, phones))
@@ -211,10 +205,8 @@ class MainFragment : Fragment() {
         cursorWithPhones?.let { cursor: Cursor ->
             for (i in 0..cursor.count) {
                 if (cursor.moveToPosition(i)) {
-                    val phone = cursorWithPhones.getString(
-                        cursorWithPhones
-                            .getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                    )
+                    val phone = cursorWithPhones.getString(cursorWithPhones
+                            .getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER))
                     phones.add(phone)
                 }
             }
