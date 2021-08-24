@@ -1,13 +1,75 @@
 package com.example.workwithcontentprovider
 
+import android.app.AlertDialog
+import android.content.Context
+import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import android.Manifest
+import android.content.Intent
+import android.database.Cursor
+import android.net.Uri
+import android.provider.ContactsContract
+import android.widget.Toast
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.workwithcontentprovider.databinding.MainFragmentBinding
 
 class MainFragment : Fragment() {
+
+    private val READ_CONTACTS = 1
+    private val CALL = 2
+    private val SEND = 3
+    private lateinit var number : String
+
+    private val contacts: MutableList<Contact> = mutableListOf()
+    private val recyclerAdapter = RecyclerAdapter(object : OnItemViewClickListener {
+        override fun onCallButtonClick(phone: String) {
+            number = phone
+            context?.let {
+                when (PERMISSION_GRANTED) {
+                    ContextCompat.checkSelfPermission(it,
+                        Manifest.permission.CALL_PHONE) -> phoneCall(number)
+                    else -> requestPermissions(arrayOf(Manifest.permission.CALL_PHONE), CALL)
+                }
+            }
+        }
+
+        override fun onSendMessageButtonClick(phone: String, message: String) {
+            number = phone
+            context?.let {
+                when (PERMISSION_GRANTED) {
+                    ContextCompat.checkSelfPermission(it,
+                        Manifest.permission.SEND_SMS) -> sendMessage(number)
+                    else -> requestPermissions(arrayOf(Manifest.permission.SEND_SMS), SEND)
+                }
+            }
+        }
+    })
+
+    private fun phoneCall(number: String) {
+        if (number != "default") {
+            val callIntent = Intent(Intent.ACTION_CALL)
+            callIntent.data = Uri.parse("tel:$number")
+            startActivity(callIntent)
+        } else {
+            Toast.makeText(context, "Number is not defined", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun sendMessage(number: String){
+        if (number != "default") {
+            val uri = Uri.parse("tel:$number")
+            val sendIntent = Intent(Intent.ACTION_SENDTO, uri)
+            sendIntent.putExtra(Intent.EXTRA_TEXT, "Hello")
+            startActivity(sendIntent)}
+        else{
+            Toast.makeText(context, "Number is not defined", Toast.LENGTH_LONG).show()
+        }
+    }
 
     private var _binding: MainFragmentBinding? = null
     private val binding get() = _binding!!
@@ -68,6 +130,20 @@ class MainFragment : Fragment() {
                     context?.let { showDialog(it) }
                 }
             }
+            CALL -> {
+                if(grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED) {
+                    phoneCall(number)
+                } else{
+                    Toast.makeText(context, "You don't assign permission.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            SEND -> {
+                if(grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED) {
+                    sendMessage(number)
+                } else{
+                    Toast.makeText(context, "You don't assign permission.", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
@@ -85,25 +161,67 @@ class MainFragment : Fragment() {
             cursorWithContacts?.let { cursor: Cursor ->
                 for (i in 0..cursor.count) {
                     if (cursor.moveToPosition(i)) {
+                        lateinit var phones: List<String>
+                        val id = cursor.getString(
+                            cursor
+                                .getColumnIndex(ContactsContract.Contacts._ID)
+                        )
                         val name = cursor.getString(
                             cursor
                                 .getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
                         )
-                        addView(it, name)
+                        if (Integer.parseInt(
+                                cursor.getString(
+                                    cursor
+                                        .getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER)
+                                )
+                            ) > 0
+                        ) {
+                            phones = getContactPhones(it, id)
+                        }
+                        contacts.add(Contact(name, phones))
                     }
                 }
             }
             cursorWithContacts?.close()
+            setView()
         }
     }
 
-    private fun addView(context: Context, textToShow: String) {
-        binding.containerForContacts.addView(TextView(context).apply {
-            text = textToShow
-            textSize = resources.getDimension(R.dimen.text_size)
-        })
+    private fun setView() {
+        with(binding) {
+            recyclerView.layoutManager = LinearLayoutManager(
+                context,
+                LinearLayoutManager.VERTICAL, false
+            )
+            recyclerView.adapter = recyclerAdapter
+            recyclerAdapter.setData(contacts)
+        }
     }
 
+    private fun getContactPhones(it: Context, id: String): List<String> {
+        val phones: MutableList<String> = mutableListOf()
+        val cursorWithPhones = it.contentResolver.query(
+            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+            null,
+            ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = " + id,
+            null,
+            null
+        )
+        cursorWithPhones?.let { cursor: Cursor ->
+            for (i in 0..cursor.count) {
+                if (cursor.moveToPosition(i)) {
+                    val phone = cursorWithPhones.getString(
+                        cursorWithPhones
+                            .getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                    )
+                    phones.add(phone)
+                }
+            }
+        }
+        cursorWithPhones?.close()
+        return phones.toList()
+    }
 
     override fun onDestroyView() {
         _binding = null
