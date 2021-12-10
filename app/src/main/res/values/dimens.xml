@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="padding">5dp</dimen>
+    <dimen name="text_size">15sp</dimen>
+    <dimen name="height_item_contact">120dp</dimen>
+    <dimen name="margin">10dp</dimen>
+</resources>
